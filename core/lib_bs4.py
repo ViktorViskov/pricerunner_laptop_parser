@@ -1,0 +1,49 @@
+#
+# class bs4 for parce html code
+#
+
+#libs
+import bs4
+
+class Selector_Serch:
+
+    # constructor
+    def __init__(self, data, is_decoded = False ,fixLinks = None) -> None:
+        
+        # init bs
+        if not is_decoded:
+            #old version for requests
+            # self.data = bs4.BeautifulSoup(data.content.decode(), "html.parser")
+
+            # version for dryscrape
+            self.data = bs4.BeautifulSoup(data, "html.parser")
+
+        else:
+            self.data = bs4.BeautifulSoup(str(data), "html.parser")
+
+        # check and repair links
+        if fixLinks:
+            self.Fix_Links(fixLinks)
+            
+    
+    #search tags
+    def Search_Tags(self, tag_name, class_name):
+        return self.data.find_all(tag_name, class_=class_name)
+    
+    #search one tag
+    def Search_One_Tag(self, tag_name, class_name = None):
+
+        if class_name:
+            return self.data.find(tag_name, class_=class_name)
+        else:
+            return self.data.find(tag_name)
+            
+            
+
+    #fix all links
+    def Fix_Links(self, add_link):
+        for link in self.data.find_all('a'):
+            try:
+                link['href'] = add_link + link['href']
+            except:
+                pass
