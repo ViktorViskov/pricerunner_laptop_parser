@@ -8,18 +8,10 @@ import bs4
 class Selector_Serch:
 
     # constructor
-    def __init__(self, data, is_decoded = False ,fixLinks = None) -> None:
+    def __init__(self, data, fixLinks = None) -> None:
         
         # init bs
-        if not is_decoded:
-            #old version for requests
-            # self.data = bs4.BeautifulSoup(data.content.decode(), "html.parser")
-
-            # version for dryscrape
-            self.data = bs4.BeautifulSoup(data, "html.parser")
-
-        else:
-            self.data = bs4.BeautifulSoup(str(data), "html.parser")
+        self.data = bs4.BeautifulSoup(str(data), "html.parser")
 
         # check and repair links
         if fixLinks:
