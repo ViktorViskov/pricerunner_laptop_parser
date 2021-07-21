@@ -7,6 +7,7 @@ import os, json
 from time import sleep
 import core.lib_bs4 as lib_bs4
 import core.lib_request as lib_request
+import core.mysql as mysql
 
 
 class Page:
@@ -30,6 +31,9 @@ class Page:
 
         # init page browser
         self.browser = lib_request.Browser(True)
+
+        # init mysql connection
+        self.mysql = mysql.Mysql_Connect("server", "root", "dbnmjr031193", "pricerunner")
 
         # cpu library (optimization)
         self.cpu_library_single = {}
@@ -97,8 +101,6 @@ class Page:
         # set new link
         self.link = new_link
             
-
-
     # write to file
     def To_File(self, data_to_file, dest_file = ""):
         if dest_file:
@@ -109,6 +111,8 @@ class Page:
             self.file = open(self.file_name, "a")
             self.file.write(data_to_file)
             self.file.close()
+    
+    
 
     # search all items and create new list
     def Search_All_Items(self):
@@ -119,6 +123,9 @@ class Page:
 
         # create browser session
         browser = lib_request.Browser()
+
+        # delete all old data from mysql database
+        self.mysql.I("delete from laptops")
 
         # element number for log
         item_number = 1
@@ -183,6 +190,12 @@ class Page:
         # cpu model (get list with properties)
         item_cpu = self.Get_Cpu_Model(item_link_root)
 
+        # Battery 
+        item_battery_time = self.Get_Battery_Time(item_link_root)
+
+        # Resolution
+        item_resolution = self.Get_Screen_Resolution(item_link_root)
+
         # geekbench points getting from 4 pages and get avarage number
         item_points_one = self.Get_Geekbench_Points(browser, item_cpu, 1)
         item_points_two = self.Get_Geekbench_Points(browser, item_cpu,2)
@@ -204,7 +217,7 @@ class Page:
 
         # write to file
         # html
-        self.To_File("<div><a href='%s'><h3>%s</h3><img width=300 src='%s'><p>%s</p><p>CPU - %s</p><p>GeekBench3 single - %d</p><p>GeekBench3 multi - %d</p><p>Old Price %s</p><p>New price %s kr.</p><p>Price power raiting index (less better) %.2f points.</p></div>\n" % (item_link, item_title, item_img ,item_desc,item_cpu, item_points_single, item_points_multi, item_old_price, item_new_price, int(item_new_price) / item_points_multi ))
+        # self.To_File("<div><a href='%s'><h3>%s</h3><img width=300 src='%s'><p>%s</p><p>CPU - %s</p><p>GeekBench3 single - %d</p><p>GeekBench3 multi - %d</p><p>Battery time %s</p><p>Resolution %s</p><p>Old Price %s</p><p>New price %s kr.</p><p>Price power raiting index (less better) %.2f points.</p></div>\n" % (item_link, item_title, item_img ,item_desc,item_cpu, item_points_single, item_points_multi, item_battery_time, item_resolution, item_old_price, item_new_price, int(item_new_price) / item_points_multi ))
         #csv
         # self.To_File("table.csv", "%s,%s,%s,%s,%s,%s\n" % (item_title, item_desc, item_cpu, item_old_price, item_new_price, item_link))
     
@@ -224,6 +237,12 @@ class Page:
         # CPU
         item_cpu = self.Get_Cpu_Model(item_link_root)
 
+        # Battery 
+        item_battery_time = self.Get_Battery_Time(item_link_root)
+
+        # Resolution
+        item_resolution = self.Get_Screen_Resolution(item_link_root)
+
         # geekbench points getting from 4 pages and get avarage number
         item_points_one = self.Get_Geekbench_Points(browser,item_cpu,1)
         item_points_two = self.Get_Geekbench_Points(browser,item_cpu,2)
@@ -234,10 +253,14 @@ class Page:
         item_points_single = (item_points_one[0] + item_points_two[0] + item_points_three[0] + item_points_four[0]) / 4
         item_points_multi = (item_points_one[1] + item_points_two[1] + item_points_three[1] + item_points_four[0]) / 4
 
+        # mysql request
+        self.mysql.I("insert into laptops values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);" , (item_title, item_desc, item_link, item_price, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi))
+        # self.mysql.I("insert into table values ('data');")
+
         # write to file
-        self.To_File("<div><a href='%s'><h3>%s</h3><img width=300 src='%s'><p>%s</p><p>CPU - %s</p><p>GeekBench3 single - %d</p><p>GeekBench3 multi - %d</p><p>Price %s kr.</p><p>Price power raiting index (less better) %.2f points.</p></div>\n" % (item_link, item_title, item_image ,item_desc,item_cpu, item_points_single, item_points_multi, item_price, float(item_price) / item_points_multi ))
+        # self.To_File("<div><a href='%s'><h3>%s</h3><img width=300 src='%s'><p>%s</p><p>CPU - %s</p><p>GeekBench3 single - %d</p><p>GeekBench3 multi - %d</p><p>Battery time %s</p><p>Resolution %s</p><p>Price %s kr.</p><p>Price power raiting index (less better) %.2f points.</p></div>\n" % (item_link, item_title, item_image ,item_desc,item_cpu, item_points_single, item_points_multi, item_battery_time, item_resolution, item_price, float(item_price) / item_points_multi ))
         #csv
-        self.To_File("%s,%s,%s,%s,%.2f,%.2f,%.2f,%s\n" % (item_title, item_desc, item_cpu, item_price, item_points_single, item_points_multi,float(item_price) / item_points_multi, item_link), "table.csv",)
+        # self.To_File("%s,'%s',%s,%s,%.2f,%.2f,%.2f,%s\n" % (item_title, item_battery_time.replace(".",","), item_cpu, item_price, item_points_single, item_points_multi,float(item_price) / item_points_multi, item_link), self.file_name + ".csv",)
 
     # get text content
     def Get_Content(self, item):
@@ -316,6 +339,65 @@ class Page:
                 continue
 
             if name == "Processor-model":
+                result += value
+                break;
+        
+        # result
+        return result
+        # Getting CPU model
+
+    def Get_Battery_Time(self, item_link_root):
+
+        # result (time of life)
+        result = "0"
+
+        # battery time (get list with properties)
+        item_cpu_root_list = item_link_root.Search_Tags("div", "_2-yxmKbU7A _1wAkY2JWCe VKqGJ23WgZ")
+
+        # check all properties search battery time
+        for cpu_item in item_cpu_root_list:
+
+            # bs init
+            cpu_item_root = lib_bs4.Selector_Serch(cpu_item, True)
+
+            # property name
+            name = self.Get_Content(cpu_item_root.Search_One_Tag("span", "_11CuNfeGpE"))
+
+            # value
+            value = self.Get_Content(cpu_item_root.Search_One_Tag("div", "_3K8xflTCMj _2-DdMjlREV"))
+
+            # logick
+
+            if name == "Batteritid":
+                result += value
+                break;
+        
+        # result
+        return float(result.split(" ")[0])
+    
+    def Get_Screen_Resolution(self, item_link_root):
+
+        # result (resolution)
+        result = ""
+
+        # resolution (get list with properties)
+        item_cpu_root_list = item_link_root.Search_Tags("div", "_2-yxmKbU7A _1wAkY2JWCe VKqGJ23WgZ")
+
+        # check all properties search resolution
+        for cpu_item in item_cpu_root_list:
+
+            # bs init
+            cpu_item_root = lib_bs4.Selector_Serch(cpu_item, True)
+
+            # property name
+            name = self.Get_Content(cpu_item_root.Search_One_Tag("span", "_11CuNfeGpE"))
+
+            # value
+            value = self.Get_Content(cpu_item_root.Search_One_Tag("div", "_3K8xflTCMj _2-DdMjlREV"))
+
+            # logick
+
+            if name == "Skærmopløsning":
                 result += value
                 break;
         
