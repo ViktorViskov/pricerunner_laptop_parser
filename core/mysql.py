@@ -27,24 +27,16 @@ class Mysql_Connect:
         self.cursor = self.connection.cursor()
 
     # Input (not read server ansver)
-    def I(self, sql_command, values = None):
+    def I(self, sql_command):
 
-        if values:
-            self.cursor.execute(sql_command, values)
-        else:
-            self.cursor.execute(sql_command)
-        
+        self.cursor.execute(sql_command)
         self.connection.commit()
 
     
     # Input and Outpur
     def IO(self, sql_command, values = None):
 
-        if values:
-            self.cursor.execute(sql_command, values)
-        else:
-            self.cursor.execute(sql_command)
-        
+        self.cursor.execute(sql_command)
         self.connection.commit()
 
         return self.cursor.fetchall()

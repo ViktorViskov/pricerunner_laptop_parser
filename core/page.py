@@ -3,8 +3,7 @@
 #
 
 # libs
-import os, json
-from time import sleep
+import json
 import core.lib_bs4 as lib_bs4
 import core.lib_request as lib_request
 import core.mysql as mysql
@@ -13,18 +12,14 @@ import core.mysql as mysql
 class Page:
 
     # constructor
-    def __init__(self, file_name:str, link:str, tag:str, item_class:str, is_json:bool = False, link_processing = True) -> None:
-        # file name
-        self.file_name = file_name
+    def __init__(self, link:str, is_json:bool = False, link_processing = True) -> None:
 
         # link
         self.link = link
 
-        # tag name from list
-        self.tag = tag
-
-        # class name from list
-        self.item_class = item_class
+        # tag and class name from list
+        self.tag = "div"
+        self.item_class = "_2Vdwcz_zWR _1bgVr-M90D"
 
         # variable json
         self.is_json = is_json
@@ -39,6 +34,9 @@ class Page:
         self.cpu_library_single = {}
         self.cpu_library_multi = {}
 
+        # mysql request optimization
+        self.mysql_data = []
+
         # Load JSON data
         if is_json:
 
@@ -47,7 +45,7 @@ class Page:
                 self.Url_Processing(link)
 
             # load page and decoding json
-            self.json_data = json.loads(self.browser.Load(self.link))
+            self.json_data = json.loads(self.browser.Fast_Load(self.link))
 
         # load usually page
         else:
@@ -99,33 +97,23 @@ class Page:
             new_link += "&af_PRICE=%s_%s" % (price_min, price_max)
 
         # set new link
-        self.link = new_link
-            
-    # write to file
-    def To_File(self, data_to_file, dest_file = ""):
-        if dest_file:
-            self.file = open(dest_file, "a")
-            self.file.write(data_to_file)
-            self.file.close()
-        else:
-            self.file = open(self.file_name, "a")
-            self.file.write(data_to_file)
-            self.file.close()
-    
-    
+        self.link = new_link    
 
+    # update data in db
+    def Send_To_Db(self):
+        # delete all old data from mysql database
+        self.mysql.I("DELETE FROM laptops")
+
+        # write all records to db
+        for record in self.mysql_data:
+            self.mysql.I(record)
+
+        
     # search all items and create new list
     def Search_All_Items(self):
 
-        # rename old file if exist
-        if os.path.exists(self.file_name):
-            os.rename(self.file_name,self.file_name + ".old.html")
-
         # create browser session
         browser = lib_request.Browser()
-
-        # delete all old data from mysql database
-        self.mysql.I("delete from laptops")
 
         # element number for log
         item_number = 1
@@ -168,6 +156,9 @@ class Page:
                 # reset browser
                 if item_number % 20 == 0:
                     browser.Reset()
+
+        # update data in db
+        self.Send_To_Db()
     
 
     # create one list item
@@ -197,29 +188,21 @@ class Page:
         item_resolution = self.Get_Screen_Resolution(item_link_root)
 
         # geekbench points getting from 4 pages and get avarage number
-        item_points_one = self.Get_Geekbench_Points(browser, item_cpu, 1)
-        item_points_two = self.Get_Geekbench_Points(browser, item_cpu,2)
-        item_points_three = self.Get_Geekbench_Points(browser, item_cpu,3)
-        item_points_four = self.Get_Geekbench_Points(browser, item_cpu,4)
-
-        # results
-        item_points_single = (item_points_one[0] + item_points_two[0] + item_points_three[0] + item_points_four[0]) / 4
-        item_points_multi = (item_points_one[1] + item_points_two[1] + item_points_three[1] + item_points_four[0]) / 4
+        item_points_single , item_points_multi = self.Get_Geekbench_Points(browser, item_cpu, 4)
 
         # image
-        item_img =  self.Get_Image_Src(item_root.Search_One_Tag("img", "_1eCHgH5-ru css-1shbqcj"))
+        item_image =  self.Get_Image_Src(item_root.Search_One_Tag("img", "_1eCHgH5-ru css-1shbqcj"))
+
+        # current price
+        price_buffer = self.Get_Content(item_link_root.Search_One_Tag("span", "_1j6NocjLHg _1hXG0xPrK5 _3GiEsJk2wF _3JJc-cEjsi css-2tmqko"))
+        item_price = price_buffer if price_buffer != "" else 0
 
         # old price
-        item_old_price = self.Get_Content(item_root.Search_One_Tag("span", "_1hXG0xPrK5 _3GiEsJk2wF _3JJc-cEjsi yNAlNXLNAJ css-2tmqko"))
+        price_buffer = self.Get_Content(item_root.Search_One_Tag("span", "_1hXG0xPrK5 _3GiEsJk2wF _3JJc-cEjsi yNAlNXLNAJ css-2tmqko"))
+        item_price_old = price_buffer if price_buffer != "" else item_price
 
-        # new price
-        item_new_price = self.Get_Content(item_link_root.Search_One_Tag("span", "_1j6NocjLHg _1hXG0xPrK5 _3GiEsJk2wF _3JJc-cEjsi css-2tmqko"))
-
-        # write to file
-        # html
-        # self.To_File("<div><a href='%s'><h3>%s</h3><img width=300 src='%s'><p>%s</p><p>CPU - %s</p><p>GeekBench3 single - %d</p><p>GeekBench3 multi - %d</p><p>Battery time %s</p><p>Resolution %s</p><p>Old Price %s</p><p>New price %s kr.</p><p>Price power raiting index (less better) %.2f points.</p></div>\n" % (item_link, item_title, item_img ,item_desc,item_cpu, item_points_single, item_points_multi, item_battery_time, item_resolution, item_old_price, item_new_price, int(item_new_price) / item_points_multi ))
-        #csv
-        # self.To_File("table.csv", "%s,%s,%s,%s,%s,%s\n" % (item_title, item_desc, item_cpu, item_old_price, item_new_price, item_link))
+         # add to buffer
+        self.mysql_data.append("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi))
     
     # make JSON list item
     def Make_Json_List_Item(self, browser, item):
@@ -230,6 +213,12 @@ class Page:
         item_link = "https://www.pricerunner.dk" + item['url']
         item_price = item['lowestPrice']['amount']
         item_image ="https://www.pricerunner.dk" + item['image']['path']
+
+        # get old price
+        try:
+            item_price_old = item['priceDrop']['oldPrice']['amount']
+        except:
+            item_price_old = item_price
 
         # open link and parse data
         item_link_root = lib_bs4.Selector_Serch(browser.Load(item_link))
@@ -244,23 +233,10 @@ class Page:
         item_resolution = self.Get_Screen_Resolution(item_link_root)
 
         # geekbench points getting from 4 pages and get avarage number
-        item_points_one = self.Get_Geekbench_Points(browser,item_cpu,1)
-        item_points_two = self.Get_Geekbench_Points(browser,item_cpu,2)
-        item_points_three = self.Get_Geekbench_Points(browser,item_cpu,3)
-        item_points_four = self.Get_Geekbench_Points(browser,item_cpu,4)
+        item_points_single , item_points_multi = self.Get_Geekbench_Points(browser, item_cpu, 4)
 
-        # results
-        item_points_single = (item_points_one[0] + item_points_two[0] + item_points_three[0] + item_points_four[0]) / 4
-        item_points_multi = (item_points_one[1] + item_points_two[1] + item_points_three[1] + item_points_four[0]) / 4
-
-        # mysql request
-        self.mysql.I("insert into laptops values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);" , (item_title, item_desc, item_link, item_price, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi))
-        # self.mysql.I("insert into table values ('data');")
-
-        # write to file
-        # self.To_File("<div><a href='%s'><h3>%s</h3><img width=300 src='%s'><p>%s</p><p>CPU - %s</p><p>GeekBench3 single - %d</p><p>GeekBench3 multi - %d</p><p>Battery time %s</p><p>Resolution %s</p><p>Price %s kr.</p><p>Price power raiting index (less better) %.2f points.</p></div>\n" % (item_link, item_title, item_image ,item_desc,item_cpu, item_points_single, item_points_multi, item_battery_time, item_resolution, item_price, float(item_price) / item_points_multi ))
-        #csv
-        # self.To_File("%s,'%s',%s,%s,%.2f,%.2f,%.2f,%s\n" % (item_title, item_battery_time.replace(".",","), item_cpu, item_price, item_points_single, item_points_multi,float(item_price) / item_points_multi, item_link), self.file_name + ".csv",)
+        # add to buffer
+        self.mysql_data.append("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi))
 
     # get text content
     def Get_Content(self, item):
@@ -279,35 +255,46 @@ class Page:
                 return ""
 
     # Load geekbench points
-    def Get_Geekbench_Points(self, browser, cpu_model, page = 1):
+    def Get_Geekbench_Points(self, browser, cpu_model, pages = 1):
 
         try:
             return self.cpu_library_single[cpu_model],self.cpu_library_multi[cpu_model]
         except:
 
-            # link root
-            root = lib_bs4.Selector_Serch(browser.Load("https://browser.geekbench.com/v5/cpu/search?page=%d&q=%s" % (page,cpu_model)))
+            # varible for results
+            single = 0
+            multi = 0
 
-            # search list items
-            list_items = root.Search_Tags("div","col-12 list-col")
+            # main loop
+            for page in range(pages):
 
-            # results
-            single_core = 0
-            multi_core = 0
+                # link root
+                root = lib_bs4.Selector_Serch(browser.Fast_Load("https://browser.geekbench.com/v5/cpu/search?page=%d&q=%s" % (page + 1,cpu_model)))
 
-            #loop for processing data
-            for item in list_items:
+                # search list items
+                list_items = root.Search_Tags("div","col-12 list-col")
 
-                # item root
-                item_root = lib_bs4.Selector_Serch(item, True)
+                # results
+                page_single_core = 0
+                page_multi_core = 0
 
-                # add to result
-                single_core += int(self.Get_Content(item_root.Search_Tags("span","list-col-text-score")[0]))
-                multi_core += int(self.Get_Content(item_root.Search_Tags("span","list-col-text-score")[1]))
-            
+                #loop for processing data
+                for item in list_items:
+
+                    # item root
+                    item_root = lib_bs4.Selector_Serch(item, True)
+
+                    # add to result
+                    page_single_core += int(self.Get_Content(item_root.Search_Tags("span","list-col-text-score")[0]))
+                    page_multi_core += int(self.Get_Content(item_root.Search_Tags("span","list-col-text-score")[1]))
+
+                # add to main
+                single += page_single_core / len(list_items) if len(list_items) > 0 else 1
+                multi += page_multi_core / len(list_items) if len(list_items) > 0 else 1
+                
             # add to library
-            self.cpu_library_single[cpu_model] = single_core / len(list_items) if len(list_items) > 0 else 1
-            self.cpu_library_multi[cpu_model] = multi_core / len(list_items) if len(list_items) > 0 else 1
+            self.cpu_library_single[cpu_model] = single / pages
+            self.cpu_library_multi[cpu_model] = multi / pages
             
             # return result
             return self.cpu_library_single[cpu_model],self.cpu_library_multi[cpu_model]

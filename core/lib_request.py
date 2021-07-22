@@ -3,7 +3,7 @@
 # 
 
 # libs
-import dryscrape, time, webkit_server
+import dryscrape, time, webkit_server, requests
 
 class Browser:
 
@@ -29,6 +29,10 @@ class Browser:
 
         # add data to variable
         return self.session.body()
+    
+    # fast load using requests
+    def Fast_Load(self, url):
+        return requests.request("GET", url).content.decode()
     
     # Pause
     def Pause(self,seconds):
