@@ -54,6 +54,7 @@ class Browser:
         self.server = webkit_server.Server()
         server_conn = webkit_server.ServerConnection(server=self.server)
         driver = dryscrape.driver.webkit.Driver(connection=server_conn)
+        dryscrape.start_xvfb()
         self.session = dryscrape.Session(driver=driver)
 
     # exit
