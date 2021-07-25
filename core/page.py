@@ -4,6 +4,7 @@
 
 # libs
 import json
+from re import split
 import core.lib_bs4 as lib_bs4
 import core.lib_request as lib_request
 import core.mysql as mysql
@@ -274,10 +275,6 @@ class Page:
                 # search list items
                 list_items = root.Search_Tags("div","col-12 list-col")
 
-                # results
-                page_single_core = 0
-                page_multi_core = 0
-
                 #loop for processing data
                 for item in list_items:
 
@@ -285,16 +282,22 @@ class Page:
                     item_root = lib_bs4.Selector_Serch(item, True)
 
                     # add to result
-                    page_single_core += int(self.Get_Content(item_root.Search_Tags("span","list-col-text-score")[0]))
-                    page_multi_core += int(self.Get_Content(item_root.Search_Tags("span","list-col-text-score")[1]))
+                    search_result = item_root.Search_Tags("span","list-col-text-score")
+
+                    # logick
+                    if int(self.Get_Content(search_result[0])) > single:
+                        single = int(self.Get_Content(search_result[0]))
+                    
+                    if int(self.Get_Content(search_result[1])) > multi:
+                        multi = int(self.Get_Content(search_result[1]))
 
                 # add to main
-                single += page_single_core / len(list_items) if len(list_items) > 0 else 1
-                multi += page_multi_core / len(list_items) if len(list_items) > 0 else 1
+                single = 0 if len(list_items) < 0 else single
+                multi = 0 if len(list_items) < 0 else multi
                 
             # add to library
-            self.cpu_library_single[cpu_model] = single / pages
-            self.cpu_library_multi[cpu_model] = multi / pages
+            self.cpu_library_single[cpu_model] = single
+            self.cpu_library_multi[cpu_model] = multi
             
             # return result
             return self.cpu_library_single[cpu_model],self.cpu_library_multi[cpu_model]
