@@ -3,17 +3,20 @@
 #
 
 # libs
-import json
-from re import split
+import json, multiprocessing, time, dryscrape
 import core.lib_bs4 as lib_bs4
-import core.lib_request as lib_request
+from core.lib_request import Browser
 import core.mysql as mysql
+
 
 
 class Page:
 
     # constructor
     def __init__(self, link:str, is_json:bool = False, link_processing = True) -> None:
+
+        # init x server session
+        dryscrape.start_xvfb()
 
         # link
         self.link = link
@@ -25,11 +28,8 @@ class Page:
         # variable json
         self.is_json = is_json
 
-        # init page browser
-        self.browser = lib_request.Browser(True)
-
         # init mysql connection
-        self.mysql = mysql.Mysql_Connect("server", "root", "dbnmjr031193", "pricerunner")
+        # self.mysql = mysql.Mysql_Connect("server", "root", "dbnmjr031193", "pricerunner")
 
         # cpu library (optimization)
         self.cpu_library_single = {}
@@ -37,6 +37,10 @@ class Page:
 
         # mysql request optimization
         self.mysql_data = []
+
+        # task quene
+        self.quene = []
+        self.quene_size = 30
 
         # Load JSON data
         if is_json:
@@ -46,12 +50,12 @@ class Page:
                 self.Url_Processing(link)
 
             # load page and decoding json
-            self.json_data = json.loads(self.browser.Fast_Load(self.link))
+            self.json_data = json.loads(Browser(self.link, True).data)
 
         # load usually page
         else:
             # load page and init parser
-            self.html = lib_bs4.Selector_Serch(self.browser.Load(self.link, 10), "https://www.pricerunner.dk")
+            self.html = lib_bs4.Selector_Serch(Browser(self.link, pause=10).data, "https://www.pricerunner.dk")
         
         # create items
         self.Search_All_Items()
@@ -113,9 +117,6 @@ class Page:
     # search all items and create new list
     def Search_All_Items(self):
 
-        # create browser session
-        browser = lib_request.Browser()
-
         # element number for log
         item_number = 1
 
@@ -124,29 +125,41 @@ class Page:
             # search all items
             items = self.json_data['products']
             
-
             # loop for create one item
             for item in items:
-                # get data and create one laptop
-                self.Make_Json_List_Item(browser, item)
+                # create and start task
+                task = multiprocessing.Process(target=self.Make_Json_List_Item,args=(item,))
+                task.start()
 
                 # show load log
-                print("Load %d from %d" % (item_number,len(items)))
+                print("Loading... %d from %d" % (item_number,len(items)))
+                
+                # add task to quene
+                self.quene.append(task)
+
+                # increment number of task
                 item_number += 1
 
-                # reset browser
-                if item_number % 20 == 0:
-                    browser.Reset()
+                # check all tasks and delete if is ready
+                while len(self.quene) > self.quene_size:
 
-
+                    # delete task from quene
+                    for task in self.quene:
+                        if (task.is_alive() == False):
+                            self.quene.remove(task)
+                    
+                    # wait
+                    time.sleep(5)
+                
         # not json
         else:
             # search all items
             items = self.html.Search_Tags(self.tag, self.item_class)
 
+
             # loop for create one item
             for item in items:
-
+    
                 # get data and create one laptop
                 self.Make_List_Item(browser, item)
 
@@ -158,8 +171,23 @@ class Page:
                 if item_number % 20 == 0:
                     browser.Reset()
 
+        # wait for quene
+        while len(self.quene) > 0:
+
+            # delete task from quene
+            for task in self.quene:
+                if (task.is_alive() == False):
+                    self.quene.remove(task)
+            
+            # wait
+            time.sleep(5)
+
+        for item in self.mysql_data:
+            print(item)
+
+        print("Send to db")
         # update data in db
-        self.Send_To_Db()
+        # self.Send_To_Db()
     
 
     # create one list item
@@ -206,8 +234,8 @@ class Page:
         self.mysql_data.append("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi))
     
     # make JSON list item
-    def Make_Json_List_Item(self, browser, item):
-
+    def Make_Json_List_Item(self, item):
+        
         # getting info
         item_title = item['name']
         item_desc = item['description']
@@ -222,7 +250,7 @@ class Page:
             item_price_old = item_price
 
         # open link and parse data
-        item_link_root = lib_bs4.Selector_Serch(browser.Load(item_link))
+        item_link_root = lib_bs4.Selector_Serch(Browser(item_link).data)
 
         # CPU
         item_cpu = self.Get_Cpu_Model(item_link_root)
@@ -234,10 +262,11 @@ class Page:
         item_resolution = self.Get_Screen_Resolution(item_link_root)
 
         # geekbench points getting from 4 pages and get avarage number
-        item_points_single , item_points_multi = self.Get_Geekbench_Points(browser, item_cpu, 4)
+        item_points_single , item_points_multi = self.Get_Geekbench_Points(item_cpu, 4)
 
         # add to buffer
         self.mysql_data.append("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi))
+        print(len(self.mysql_data))
 
     # get text content
     def Get_Content(self, item):
@@ -256,7 +285,7 @@ class Page:
                 return ""
 
     # Load geekbench points
-    def Get_Geekbench_Points(self, browser, cpu_model, pages = 1):
+    def Get_Geekbench_Points(self, cpu_model, pages = 1):
 
         try:
             return self.cpu_library_single[cpu_model],self.cpu_library_multi[cpu_model]
@@ -270,7 +299,7 @@ class Page:
             for page in range(pages):
 
                 # link root
-                root = lib_bs4.Selector_Serch(browser.Fast_Load("https://browser.geekbench.com/v5/cpu/search?page=%d&q=%s" % (page + 1,cpu_model)))
+                root = lib_bs4.Selector_Serch(Browser("https://browser.geekbench.com/v5/cpu/search?page=%d&q=%s" % (page + 1,cpu_model),True).data)
 
                 # search list items
                 list_items = root.Search_Tags("div","col-12 list-col")
