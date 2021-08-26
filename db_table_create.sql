@@ -1,0 +1,1 @@
+CREATE TABLE laptops (title varchar(255), description varchar(255), link varchar(255), price decimal(10,0), price_old decimal(10,0), image_url varchar(255), CPU varchar(50), battery decimal(10,0), resolution varchar(50), geekbench_single decimal(10,0), geekbench_multi decimal(10,0));
