@@ -3,7 +3,8 @@
 # 
 
 # libs
-import dryscrape, time, webkit_server, requests
+# import dryscrape, webkit_server
+import time, requests
 
 # async class for load data
 class Browser:

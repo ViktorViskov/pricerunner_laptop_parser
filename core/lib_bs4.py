@@ -29,6 +29,10 @@ class Selector_Serch:
             return self.data.find(tag_name, class_=class_name)
         else:
             return self.data.find(tag_name)
+
+    #search by id
+    def Search_By_Id(self, id:str):
+        return self.data.find(id=id)
             
             
 

@@ -3,7 +3,9 @@
 #
 
 # libs
-import json, multiprocessing, time, dryscrape, psutil
+# import dryscrape
+import json, multiprocessing, time, psutil
+from requests.api import get
 import core.lib_bs4 as lib_bs4
 from core.lib_request import Browser
 import core.mysql as mysql
@@ -15,13 +17,13 @@ class Page:
     def __init__(self, link:str) -> None:
 
         # init x server session
-        dryscrape.start_xvfb()
+        # dryscrape.start_xvfb()
 
         # link
         self.link = link
 
         # init mysql connection
-        self.mysql = mysql.Mysql_Connect("192.168.111.37", "root", "dbnmjr031193", "flask_test")
+        self.mysql = mysql.Mysql_Connect("10.0.0.2", "root", "dbnmjr031193", "pricerunner")
 
         # variable for define pages (1000 per 1 page)
         json_page = 0
@@ -100,10 +102,21 @@ class Page:
     def Send_To_Db(self, data_dict):
         # delete all old data from mysql database
         self.mysql.I("DELETE FROM laptops")
+        
+        # item number for log
+        item_number = 1
 
         # write all records to db
         for key in data_dict:
+
+            # show message
+            print("Record number %d from %d" % (item_number, len(data_dict)))
+
+            # requests to db
             self.mysql.I(data_dict[key])
+
+            item_number += 1
+            
 
         
     # search all items and create new list
@@ -113,7 +126,7 @@ class Page:
 
         # threads
         threads = []
-        max_threads = 1
+        max_threads = 300
 
         # data storages
         data_buffer = manager.dict()
@@ -170,15 +183,16 @@ class Page:
             
             # wait
             time.sleep(1)
-
+            print("Await")
+        
         # update data in db
         self.Send_To_Db(data_buffer)
+        # print(data_buffer)
 
     # make JSON list item
     def Make_Json_List_Item(self, item, number, data_buffer, cpu_buffer_single, cpu_buffer_multy):
         
         # getting info
-        item_title = item['name']
         item_desc = item['description']
         item_link = "https://www.pricerunner.dk" + item['url']
         item_price = item['lowestPrice']['amount']
@@ -191,36 +205,53 @@ class Page:
             item_price_old = item_price
 
         # open link and parse data
-        item_link_root = lib_bs4.Selector_Serch(Browser(item_link).data)
+        item_link_root = lib_bs4.Selector_Serch(Browser(item_link,True).data)
+
+        # get json data
+        product_json = json.loads(self.Get_Content(item_link_root.Search_By_Id("initial_payload")))['__INITIAL_STATE__']['productList']['pl']
+        product_id = product_json['currentProductId']
+
+        # dict for description
+        product_specification = {}
+
+        # read product description
+        # loop in sections
+        for section in product_json[product_id]['specification']['sections']:
+            # loop in attributes
+            for atribut in section['attributes']:
+                # set data in dict
+                product_specification[atribut['name']] = atribut['values'][0]['name']
+
+        
+
+        # # uncomment to show description
+        # for key in product_specification:
+        #     print("%s -> %s" % (key, product_specification[key]))
+
+        # info about item
+        item_title = self.Get_Dict_Value('Produktnavn', product_specification).strip().upper()
 
         # CPU
-        item_cpu = self.Get_Cpu_Model(item_link_root)
+        item_cpu = "%s %s" % (self.Get_Dict_Value('Processor-serie', product_specification), self.Get_Dict_Value('Processor-model', product_specification))
 
         # Battery 
-        item_battery_time = self.Get_Battery_Time(item_link_root)
+        item_battery_time = float(self.Get_Dict_Value('Batteritid', product_specification).split(" ")[0]) if self.Get_Dict_Value('Batteritid', product_specification) != 'None' else 0
 
         # Resolution
-        item_resolution = self.Get_Screen_Resolution(item_link_root)
+        item_resolution = self.Get_Dict_Value('Skærmopløsning',product_specification)
 
         # geekbench points getting from 4 pages and get avarage number
-        item_points_single , item_points_multi = self.Get_Geekbench_Points(cpu_buffer_single, cpu_buffer_multy, item_cpu, 4)
+        # item_points_single , item_points_multi = self.Get_Geekbench_Points(cpu_buffer_single, cpu_buffer_multy, item_cpu, 4)
+        item_points_single , item_points_multi = 0,0
 
         # add data to shared array
-        data_buffer[number] = ("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi))
+        data_buffer[item_title] = "INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi)
 
     # get text content
     def Get_Content(self, item):
             # desc
             try:
                 return item.contents[0]
-            except:
-                return ""
-    
-    # get image src
-    def Get_Image_Src(self, item):
-            # desc
-            try:
-                return item['src']
             except:
                 return ""
 
@@ -234,35 +265,47 @@ class Page:
             # varible for results
             single = 0
             multi = 0
+            trying = 3
 
-            # main loop
-            for page in range(pages):
+            # loop for trying 3 times
+            while trying > 0:
 
-                # link root
-                root = lib_bs4.Selector_Serch(Browser("https://browser.geekbench.com/v5/cpu/search?page=%d&q=%s" % (page + 1,cpu_model),True).data)
+                # main loop
+                for page in range(pages):
 
-                # search list items
-                list_items = root.Search_Tags("div","col-12 list-col")
+                    # link root
+                    root = lib_bs4.Selector_Serch(Browser("https://browser.geekbench.com/v5/cpu/search?page=%d&q=%s" % (page + 1,cpu_model),True).data)
 
-                #loop for processing data
-                for item in list_items:
+                    # search list items
+                    list_items = root.Search_Tags("div","col-12 list-col")
 
-                    # item root
-                    item_root = lib_bs4.Selector_Serch(item, True)
+                    #loop for processing data
+                    for item in list_items:
 
-                    # add to result
-                    search_result = item_root.Search_Tags("span","list-col-text-score")
+                        # item root
+                        item_root = lib_bs4.Selector_Serch(item, True)
 
-                    # logick
-                    if int(self.Get_Content(search_result[0])) > single:
-                        single = int(self.Get_Content(search_result[0]))
-                    
-                    if int(self.Get_Content(search_result[1])) > multi:
-                        multi = int(self.Get_Content(search_result[1]))
+                        # add to result
+                        search_result = item_root.Search_Tags("span","list-col-text-score")
 
-                # add to main
-                single = 0 if len(list_items) < 0 else single
-                multi = 0 if len(list_items) < 0 else multi
+                        # logick
+                        if int(self.Get_Content(search_result[0])) > single:
+                            single = int(self.Get_Content(search_result[0]))
+                        
+                        if int(self.Get_Content(search_result[1])) > multi:
+                            multi = int(self.Get_Content(search_result[1]))
+
+                    # add to main
+                    single = 0 if len(list_items) < 0 else single
+                    multi = 0 if len(list_items) < 0 else multi
+
+                    # stop if is result
+                    if single != 0 or multi != 0 or trying == 0:
+                        trying = 0
+
+                    # minus one time
+                    else:
+                        trying -= 1
                 
             # add to library
             cpu_buffer_single[cpu_model] = single
@@ -271,94 +314,15 @@ class Page:
             # return result
             return cpu_buffer_single[cpu_model],cpu_buffer_multy[cpu_model]
     
-    # Getting CPU model
-    def Get_Cpu_Model(self, item_link_root):
+    # Getting value from dict
+    def Get_Dict_Value(self,key, checked_dict):
 
         # result (CPU model)
-        result = ""
+        result = "None"
 
-        # cpu model (get list with properties)
-        item_cpu_root_list = item_link_root.Search_Tags("div", "_2-yxmKbU7A _1wAkY2JWCe VKqGJ23WgZ")
-
-        # check all properties search CPU model
-        for cpu_item in item_cpu_root_list:
-
-            # bs init
-            cpu_item_root = lib_bs4.Selector_Serch(cpu_item, True)
-
-            # property name
-            name = self.Get_Content(cpu_item_root.Search_One_Tag("span", "_11CuNfeGpE"))
-
-            # value
-            value = self.Get_Content(cpu_item_root.Search_One_Tag("div", "_3K8xflTCMj _2-DdMjlREV"))
-
-            # logick
-            if name == "Processor-serie":
-                result += "%s " % value
-                continue
-
-            if name == "Processor-model":
-                result += value
-                break;
-        
-        # result
-        return result
-        # Getting CPU model
-
-    def Get_Battery_Time(self, item_link_root):
-
-        # result (time of life)
-        result = "0"
-
-        # battery time (get list with properties)
-        item_cpu_root_list = item_link_root.Search_Tags("div", "_2-yxmKbU7A _1wAkY2JWCe VKqGJ23WgZ")
-
-        # check all properties search battery time
-        for cpu_item in item_cpu_root_list:
-
-            # bs init
-            cpu_item_root = lib_bs4.Selector_Serch(cpu_item, True)
-
-            # property name
-            name = self.Get_Content(cpu_item_root.Search_One_Tag("span", "_11CuNfeGpE"))
-
-            # value
-            value = self.Get_Content(cpu_item_root.Search_One_Tag("div", "_3K8xflTCMj _2-DdMjlREV"))
-
-            # logick
-
-            if name == "Batteritid":
-                result += value
-                break;
-        
-        # result
-        return float(result.split(" ")[0])
-    
-    def Get_Screen_Resolution(self, item_link_root):
-
-        # result (resolution)
-        result = ""
-
-        # resolution (get list with properties)
-        item_cpu_root_list = item_link_root.Search_Tags("div", "_2-yxmKbU7A _1wAkY2JWCe VKqGJ23WgZ")
-
-        # check all properties search resolution
-        for cpu_item in item_cpu_root_list:
-
-            # bs init
-            cpu_item_root = lib_bs4.Selector_Serch(cpu_item, True)
-
-            # property name
-            name = self.Get_Content(cpu_item_root.Search_One_Tag("span", "_11CuNfeGpE"))
-
-            # value
-            value = self.Get_Content(cpu_item_root.Search_One_Tag("div", "_3K8xflTCMj _2-DdMjlREV"))
-
-            # logick
-
-            if name == "Skærmopløsning":
-                result += value
-                break;
+        # check for key
+        if key in checked_dict:
+            result = checked_dict[key]
         
         # result
         return result
