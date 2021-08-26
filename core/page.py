@@ -12,7 +12,7 @@ import core.mysql as mysql
 class Page:
 
     # constructor
-    def __init__(self, link:str, link_processing = True) -> None:
+    def __init__(self, link:str) -> None:
 
         # init x server session
         dryscrape.start_xvfb()
@@ -23,22 +23,43 @@ class Page:
         # init mysql connection
         self.mysql = mysql.Mysql_Connect("192.168.111.37", "root", "dbnmjr031193", "flask_test")
 
-        # process link
-        if link_processing:
-            self.Url_Processing(link)
+        # variable for define pages (1000 per 1 page)
+        json_page = 0
 
-        # load page and decoding json
-        self.json_data = json.loads(Browser(self.link, True).data)
-        
+        # items array for processing
+        self.items = []
+
+        # Selecting all items
+        while True:
+
+            # process link
+            self.Url_Processing(link, json_page * 1000)
+
+            # load page and decoding json
+            self.json_data = json.loads(Browser(self.link, True).data)
+
+            # check for page is available
+            if int(self.json_data['totalHits']) - json_page * 1000 < 0:
+                break
+
+            # Pring page number
+            print("Page nr. %d" % (json_page + 1))
+
+            # # add items to array
+            self.items += self.json_data['products']
+
+            # # next page
+            json_page += 1           
+
         # create items
         self.Search_All_Items()
 
     # function for string processing (create link to request and get json)
-    def Url_Processing(self, link):
+    def Url_Processing(self, link, offset = 0):
         # get attributes from current link
         old_link_attributs = link.split("?")[1].split("&")
         # new link base
-        new_link = "https://www.pricerunner.dk/public/search/category/products/v2/dk/27?size=1000"
+        new_link = "https://www.pricerunner.dk/public/search/category/products/v2/dk/27?size=1000&offset=%d" % offset
 
         # variables for prices
         price_min = 0
@@ -73,7 +94,7 @@ class Page:
             new_link += "&af_PRICE=%s_%s" % (price_min, price_max)
 
         # set new link
-        self.link = new_link    
+        self.link = new_link   
 
     # update data in db
     def Send_To_Db(self, data_dict):
@@ -101,19 +122,16 @@ class Page:
 
         # element number for log
         item_number = 1
-
-        # search all items
-        items = self.json_data['products']
         
         # loop for create one item
-        for item in items:
+        for item in self.items:
 
             # create and start task
             task = multiprocessing.Process(target=self.Make_Json_List_Item,args=(item,item_number,data_buffer, cpu_buffer_single, cpu_buffer_multy,))
             task.start()
 
             # show load log
-            print("Loading... %d from %d. Amount of threads is %d." % (item_number,len(items), max_threads))
+            print("Loading... %d from %d. Amount of threads is %d." % (item_number,len(self.items), max_threads))
             
             # add task to quene
             threads.append(task)
