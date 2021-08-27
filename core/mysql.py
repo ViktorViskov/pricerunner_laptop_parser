@@ -8,7 +8,7 @@ import mysql.connector
 class Mysql_Connect:
 
     # constructor
-    def __init__(self, host, user, password, db) -> None:
+    def __init__(self, host, user, password, db):
 
         self.host = host
         self.user = user

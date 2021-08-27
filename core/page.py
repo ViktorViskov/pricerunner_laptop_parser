@@ -3,9 +3,7 @@
 #
 
 # libs
-# import dryscrape
 import json, multiprocessing, time, psutil
-from requests.api import get
 import core.lib_bs4 as lib_bs4
 from core.lib_request import Browser
 import core.mysql as mysql
@@ -14,16 +12,13 @@ import core.mysql as mysql
 class Page:
 
     # constructor
-    def __init__(self, link:str) -> None:
-
-        # init x server session
-        # dryscrape.start_xvfb()
+    def __init__(self, link:str):
 
         # link
         self.link = link
 
         # init mysql connection
-        self.mysql = mysql.Mysql_Connect("10.0.0.2", "root", "dbnmjr031193", "pricerunner")
+        self.mysql = mysql.Mysql_Connect("192.168.111.37", "root", "dbnmjr031193", "flask_test")
 
         # variable for define pages (1000 per 1 page)
         json_page = 0
@@ -38,7 +33,7 @@ class Page:
             self.Url_Processing(link, json_page * 1000)
 
             # load page and decoding json
-            self.json_data = json.loads(Browser(self.link, True).data)
+            self.json_data = json.loads(Browser(self.link).data)
 
             # check for page is available
             if int(self.json_data['totalHits']) - json_page * 1000 < 0:
@@ -58,6 +53,7 @@ class Page:
 
     # function for string processing (create link to request and get json)
     def Url_Processing(self, link, offset = 0):
+
         # get attributes from current link
         old_link_attributs = link.split("?")[1].split("&")
         # new link base
@@ -115,9 +111,8 @@ class Page:
             # requests to db
             self.mysql.I(data_dict[key])
 
+            # item number
             item_number += 1
-            
-
         
     # search all items and create new list
     def Search_All_Items(self):
@@ -126,12 +121,13 @@ class Page:
 
         # threads
         threads = []
-        max_threads = 300
+        max_threads = 1
 
         # data storages
         data_buffer = manager.dict()
         cpu_buffer_single = manager.dict()
         cpu_buffer_multy = manager.dict()
+        geekbench_status = manager.dict()
 
         # element number for log
         item_number = 1
@@ -140,7 +136,7 @@ class Page:
         for item in self.items:
 
             # create and start task
-            task = multiprocessing.Process(target=self.Make_Json_List_Item,args=(item,item_number,data_buffer, cpu_buffer_single, cpu_buffer_multy,))
+            task = multiprocessing.Process(target=self.Make_Json_List_Item,args=(item,data_buffer, cpu_buffer_single, cpu_buffer_multy, geekbench_status,))
             task.start()
 
             # show load log
@@ -166,31 +162,46 @@ class Page:
                 # check for ram and cpu usage
                 if psutil.virtual_memory()[2] < 65 and cpu_usage < 90:
                     print("Quene incrementing. Quene size %s. CPU usage %f. Ram usage %f" % (max_threads, cpu_usage, psutil.virtual_memory()[2]))
-                    max_threads += 1
+                    max_threads += 10
                 
-                elif max_threads != 0 and psutil.virtual_memory()[2] > 85 or max_threads != 0 and cpu_usage > 99:
+                elif max_threads > 10 and psutil.virtual_memory()[2] > 85 or max_threads > 10 and cpu_usage > 99:
                     print("Quene decrementing. Quene size %s. CPU usage %f. Ram usage %f" % (max_threads, cpu_usage, psutil.virtual_memory()[2]))
-                    max_threads -= 1
+                    max_threads -= 10
 
         # wait for threads
-        while len(threads) > 0:
+        # counter for await 10 minuts for all request
+        await_counter = 600
+        while len(threads) > 0 or await_counter > 0:
 
             # delete task from quene
             for task in threads:
-                if (task.is_alive() == False):
+                if await_counter <= 0:
+                    task.kill()
+                    threads.remove(task)
+                    print("Task in quene %d" % len(threads))                    
+
+                elif task.is_alive() == False:
                     threads.remove(task)
                     print("Task in quene %d" % len(threads))
+
+                if len(threads) == 0:
+                    await_counter = 0
             
             # wait
             time.sleep(1)
-            print("Await")
+
+            # print status message
+            print("%d seconds to terminate all tasks from quene" % await_counter)
+
+            # minus counter for awaiting tasks
+            await_counter -= 1
         
         # update data in db
         self.Send_To_Db(data_buffer)
         # print(data_buffer)
 
     # make JSON list item
-    def Make_Json_List_Item(self, item, number, data_buffer, cpu_buffer_single, cpu_buffer_multy):
+    def Make_Json_List_Item(self, item, data_buffer, cpu_buffer_single, cpu_buffer_multy, geekbench_status):
         
         # getting info
         item_desc = item['description']
@@ -205,47 +216,53 @@ class Page:
             item_price_old = item_price
 
         # open link and parse data
-        item_link_root = lib_bs4.Selector_Serch(Browser(item_link,True).data)
+        item_link_root = lib_bs4.Selector_Serch(Browser(item_link).data)
 
         # get json data
-        product_json = json.loads(self.Get_Content(item_link_root.Search_By_Id("initial_payload")))['__INITIAL_STATE__']['productList']['pl']
-        product_id = product_json['currentProductId']
+        product_json = json.loads(self.Get_Content(item_link_root.Search_By_Id("initial_payload")))['__INITIAL_STATE__']
+        product_json = self.Get_Dict_Value('productList', product_json)
 
-        # dict for description
-        product_specification = {}
+        # get if present json
+        if product_json != "":
+            product_json = product_json['pl']
+                
+            product_id = product_json['currentProductId']
 
-        # read product description
-        # loop in sections
-        for section in product_json[product_id]['specification']['sections']:
-            # loop in attributes
-            for atribut in section['attributes']:
-                # set data in dict
-                product_specification[atribut['name']] = atribut['values'][0]['name']
+            # dict for description
+            product_specification = {}
 
-        
+            # read product description
+            # loop in sections
+            for section in product_json[product_id]['specification']['sections']:
+                # loop in attributes
+                for atribut in section['attributes']:
+                    # set data in dict
+                    product_specification[atribut['name']] = atribut['values'][0]['name']
 
-        # # uncomment to show description
-        # for key in product_specification:
-        #     print("%s -> %s" % (key, product_specification[key]))
+            
 
-        # info about item
-        item_title = self.Get_Dict_Value('Produktnavn', product_specification).strip().upper()
+            # # uncomment to show description
+            # for key in product_specification:
+            #     print("%s -> %s" % (key, product_specification[key]))
 
-        # CPU
-        item_cpu = "%s %s" % (self.Get_Dict_Value('Processor-serie', product_specification), self.Get_Dict_Value('Processor-model', product_specification))
+            # info about item
+            item_title = self.Get_Dict_Value('Produktnavn', product_specification).strip().upper()
 
-        # Battery 
-        item_battery_time = float(self.Get_Dict_Value('Batteritid', product_specification).split(" ")[0]) if self.Get_Dict_Value('Batteritid', product_specification) != 'None' else 0
+            # CPU
+            item_cpu = "%s %s" % (self.Get_Dict_Value('Processor-serie', product_specification), self.Get_Dict_Value('Processor-model', product_specification))
 
-        # Resolution
-        item_resolution = self.Get_Dict_Value('Skærmopløsning',product_specification)
+            # Battery 
+            item_battery_time = float(self.Get_Dict_Value('Batteritid', product_specification).split(" ")[0]) if self.Get_Dict_Value('Batteritid', product_specification) != '' else 0
 
-        # geekbench points getting from 4 pages and get avarage number
-        # item_points_single , item_points_multi = self.Get_Geekbench_Points(cpu_buffer_single, cpu_buffer_multy, item_cpu, 4)
-        item_points_single , item_points_multi = 0,0
+            # Resolution
+            item_resolution = self.Get_Dict_Value('Skærmopløsning',product_specification)
 
-        # add data to shared array
-        data_buffer[item_title] = "INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi)
+            # geekbench points getting from 4 pages and get avarage number
+            item_points_single , item_points_multi = self.Get_Geekbench_Points(cpu_buffer_single, cpu_buffer_multy, item_cpu, geekbench_status, 4)
+            # item_points_single , item_points_multi = 0,0
+
+            # add data to shared array
+            data_buffer[item_title] = "INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi)
 
     # get text content
     def Get_Content(self, item):
@@ -256,16 +273,48 @@ class Page:
                 return ""
 
     # Load geekbench points
-    def Get_Geekbench_Points(self, cpu_buffer_single, cpu_buffer_multy, cpu_model, pages = 1):
+    def Get_Geekbench_Points(self, cpu_buffer_single, cpu_buffer_multy, cpu_model:str, geekbench_status , pages = 1):
+
+        # preprocess cpu model
+        cpu_model = cpu_model.strip().upper()
 
         try:
-            return cpu_buffer_single[cpu_model],cpu_buffer_multy[cpu_model]
+            while True:
+                # check for result. If 0 await for other process some parse info
+                single, multi = cpu_buffer_single[cpu_model],cpu_buffer_multy[cpu_model]
+
+                # check result is awailable
+                if single == "" and multi == "":
+                    time.sleep(1)
+                    # print("Await for %s data" % cpu_model)
+                
+                # return result
+                else:
+                    return single, multi
+                
         except:
+
+            # add to library for starting search
+            cpu_buffer_single[cpu_model] = ""
+            cpu_buffer_multy[cpu_model] = ""
+
+            # check for process status 
+            while True:
+                # check status
+                if len(geekbench_status) < 2:
+                    break
+
+                else:
+                    time.sleep(3)
+            
+            # change status
+            geekbench_status[cpu_model] = True
+
 
             # varible for results
             single = 0
             multi = 0
-            trying = 3
+            trying = 5
 
             # loop for trying 3 times
             while trying > 0:
@@ -274,7 +323,7 @@ class Page:
                 for page in range(pages):
 
                     # link root
-                    root = lib_bs4.Selector_Serch(Browser("https://browser.geekbench.com/v5/cpu/search?page=%d&q=%s" % (page + 1,cpu_model),True).data)
+                    root = lib_bs4.Selector_Serch(Browser("https://browser.geekbench.com/v5/cpu/search?page=%d&q=%s" % (page + 1,cpu_model)).data)
 
                     # search list items
                     list_items = root.Search_Tags("div","col-12 list-col")
@@ -310,6 +359,12 @@ class Page:
             # add to library
             cpu_buffer_single[cpu_model] = single
             cpu_buffer_multy[cpu_model] = multi
+
+            # change status
+            geekbench_status.pop(cpu_model)
+
+            # show status message
+            print("CPU %s data loaded" % cpu_model)
             
             # return result
             return cpu_buffer_single[cpu_model],cpu_buffer_multy[cpu_model]
@@ -318,7 +373,7 @@ class Page:
     def Get_Dict_Value(self,key, checked_dict):
 
         # result (CPU model)
-        result = "None"
+        result = ""
 
         # check for key
         if key in checked_dict:

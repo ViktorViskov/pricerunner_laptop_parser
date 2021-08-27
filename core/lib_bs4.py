@@ -8,7 +8,7 @@ import bs4
 class Selector_Serch:
 
     # constructor
-    def __init__(self, data, fixLinks = None) -> None:
+    def __init__(self, data, fixLinks = None):
         
         # init bs
         self.data = bs4.BeautifulSoup(str(data), "html.parser")
@@ -18,7 +18,7 @@ class Selector_Serch:
             self.Fix_Links(fixLinks)
             
     
-    #search tags
+    # search tags
     def Search_Tags(self, tag_name, class_name):
         return self.data.find_all(tag_name, class_=class_name)
     
