@@ -105,9 +105,6 @@ class Page:
         # write all records to db
         for key in data_dict:
 
-            # show message
-            print("Record number %d from %d" % (item_number, len(data_dict)))
-
             # requests to db
             self.mysql.I(data_dict[key])
 
@@ -140,7 +137,6 @@ class Page:
             task.start()
 
             # show load log
-            print("Loading... %d from %d. Amount of threads is %d." % (item_number,len(self.items), max_threads))
             
             # add task to quene
             threads.append(task)
@@ -148,9 +144,13 @@ class Page:
             # increment number of task
             item_number += 1
 
+            # status message
+            if (item_number % 100 == 0):
+                print("Loading... %d from %d. Amount of threads is %d." % (item_number,len(self.items), max_threads))
+
             # check all tasks and delete if is ready
             while len(threads) >= max_threads:
-
+    
                 # delete task from quene
                 for task in threads:
                     if (task.is_alive() == False):
@@ -159,18 +159,17 @@ class Page:
                 # getting info about cpu usage and wait
                 cpu_usage = psutil.cpu_percent(2)
 
+
                 # check for ram and cpu usage
                 if psutil.virtual_memory()[2] < 65 and cpu_usage < 90:
-                    print("Quene incrementing. Quene size %s. CPU usage %f. Ram usage %f" % (max_threads, cpu_usage, psutil.virtual_memory()[2]))
                     max_threads += 10
                 
                 elif max_threads > 10 and psutil.virtual_memory()[2] > 85 or max_threads > 10 and cpu_usage > 99:
-                    print("Quene decrementing. Quene size %s. CPU usage %f. Ram usage %f" % (max_threads, cpu_usage, psutil.virtual_memory()[2]))
                     max_threads -= 10
 
         # wait for threads
         # counter for await 10 minuts for all request
-        await_counter = 600
+        await_counter = 60
         while len(threads) > 0 or await_counter > 0:
 
             # delete task from quene
@@ -188,10 +187,10 @@ class Page:
                     await_counter = 0
             
             # wait
-            time.sleep(1)
+            time.sleep(10)
 
             # print status message
-            print("%d seconds to terminate all tasks from quene" % await_counter)
+            print("%d0 seconds to terminate all tasks from quene" % await_counter)
 
             # minus counter for awaiting tasks
             await_counter -= 1
@@ -284,7 +283,7 @@ class Page:
                 single, multi = cpu_buffer_single[cpu_model],cpu_buffer_multy[cpu_model]
 
                 # check result is awailable
-                if single == "" and multi == "":
+                if single == "" or multi == "":
                     time.sleep(1)
                     # print("Await for %s data" % cpu_model)
                 
@@ -362,9 +361,6 @@ class Page:
 
             # change status
             geekbench_status.pop(cpu_model)
-
-            # show status message
-            print("CPU %s data loaded" % cpu_model)
             
             # return result
             return cpu_buffer_single[cpu_model],cpu_buffer_multy[cpu_model]
