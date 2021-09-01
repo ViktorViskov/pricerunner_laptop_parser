@@ -18,7 +18,7 @@ class Page:
         self.link = link
 
         # init mysql connection
-        self.mysql = mysql.Mysql_Connect("192.168.111.37", "root", "dbnmjr031193", "flask_test")
+        self.mysql = mysql.Mysql_Connect("db", "root", "dbnmjr031193", "pricerunner")
 
         # variable for define pages (1000 per 1 page)
         json_page = 0
@@ -146,10 +146,10 @@ class Page:
 
             # status message
             if (item_number % 100 == 0):
-                print("Loading... %d from %d. Amount of threads is %d." % (item_number,len(self.items), max_threads))
+                print("Loading... %d from %d. Amount of threads is %d. Max threads is %d" % (item_number,len(self.items), len(threads), max_threads))
 
             # check all tasks and delete if is ready
-            while len(threads) >= max_threads:
+            while len(threads) >= max_threads or len(threads) >= 490:
     
                 # delete task from quene
                 for task in threads:
@@ -161,7 +161,7 @@ class Page:
 
 
                 # check for ram and cpu usage
-                if psutil.virtual_memory()[2] < 65 and cpu_usage < 90:
+                if psutil.virtual_memory()[2] < 65 and cpu_usage < 90 and max_threads < 490:
                     max_threads += 10
                 
                 elif max_threads > 10 and psutil.virtual_memory()[2] > 85 or max_threads > 10 and cpu_usage > 99:
@@ -177,11 +177,9 @@ class Page:
                 if await_counter <= 0:
                     task.kill()
                     threads.remove(task)
-                    print("Task in quene %d" % len(threads))                    
 
                 elif task.is_alive() == False:
                     threads.remove(task)
-                    print("Task in quene %d" % len(threads))
 
                 if len(threads) == 0:
                     await_counter = 0
@@ -190,7 +188,7 @@ class Page:
             time.sleep(10)
 
             # print status message
-            print("%d0 seconds to terminate all tasks from quene" % await_counter)
+            print("%d0 seconds to terminate %d tasks from quene" % (await_counter, len(threads)))
 
             # minus counter for awaiting tasks
             await_counter -= 1

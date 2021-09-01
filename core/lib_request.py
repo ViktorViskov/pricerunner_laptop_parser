@@ -3,7 +3,7 @@
 # 
 
 # libs
-import requests
+import requests, time
 
 # async class for load data
 class Browser:
@@ -11,7 +11,7 @@ class Browser:
     # constructor
     def __init__(self, url, load_counter = 30):
         # max count
-        self.load_counter =load_counter
+        self.load_counter = load_counter
 
         # load page
         self.data = self.Load(url)
@@ -33,6 +33,7 @@ class Browser:
             except:
                 print("Link %s not response. Retry number %d" % (url, count_number))
                 count_number += 1
+                time.sleep(10)
         
         # return result
         return result
