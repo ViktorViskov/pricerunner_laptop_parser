@@ -216,27 +216,27 @@ class Page:
         item_link_root = lib_bs4.Selector_Serch(Browser(item_link).data)
 
         # get json data
-        product_json = json.loads(self.Get_Content(item_link_root.Search_By_Id("initial_payload")))['__INITIAL_STATE__']
-        product_json = self.Get_Dict_Value('productList', product_json)
-
+        try:
+            product_json = json.loads(self.Get_Content(item_link_root.Search_By_Id("initial_payload")))['__INITIAL_PROPS__']['__DEHYDRATED_QUERY_STATE__']['queries'][4]['state']['data']
+        except:
+            product_json = ""
+            print("Parsing error!!!")
+            
         # get if present json
         if product_json != "":
-            product_json = product_json['pl']
-                
-            product_id = product_json['currentProductId']
 
             # dict for description
             product_specification = {}
 
             # read product description
             # loop in sections
-            for section in product_json[product_id]['specification']['sections']:
+            for section in product_json['specification']['sections']:
                 # loop in attributes
                 for atribut in section['attributes']:
                     # set data in dict
                     product_specification[atribut['name']] = atribut['values'][0]['name']
 
-            
+
 
             # # uncomment to show description
             # for key in product_specification:
