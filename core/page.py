@@ -7,6 +7,7 @@ import json, multiprocessing, time, psutil
 import core.lib_bs4 as lib_bs4
 from core.lib_request import Browser
 import core.mysql as mysql
+from hashlib import sha256
 
 # main class page
 class Page:
@@ -120,7 +121,7 @@ class Page:
         threads = []
         max_threads = 1
 
-        # data storages
+        # multiprocess data variables
         data_buffer = manager.dict()
         cpu_buffer_single = manager.dict()
         cpu_buffer_multy = manager.dict()
@@ -129,14 +130,12 @@ class Page:
         # element number for log
         item_number = 1
         
-        # loop for create one item
+        # loop for iterate laptops from list
         for item in self.items:
 
             # create and start task
             task = multiprocessing.Process(target=self.Make_Json_List_Item,args=(item,data_buffer, cpu_buffer_single, cpu_buffer_multy, geekbench_status,))
             task.start()
-
-            # show load log
             
             # add task to quene
             threads.append(task)
@@ -194,7 +193,7 @@ class Page:
             await_counter -= 1
         
         # update data in db
-        self.Send_To_Db(data_buffer)
+        # self.Send_To_Db(data_buffer)
         # print(data_buffer)
 
     # make JSON list item
@@ -217,7 +216,16 @@ class Page:
 
         # get json data
         try:
-            product_json = json.loads(self.Get_Content(item_link_root.Search_By_Id("initial_payload")))['__INITIAL_PROPS__']['__DEHYDRATED_QUERY_STATE__']['queries'][4]['state']['data']
+
+            # 
+            # If parsing error, LOOK HERE FIRST
+            # 
+
+            product_json = json.loads(self.Get_Content(item_link_root.Search_By_Id("initial_payload")))['__INITIAL_PROPS__']['__DEHYDRATED_QUERY_STATE__']['queries'][5]['state']['data']
+
+            # 
+            # If parsing error, LOOK HERE FIRST
+            # 
         except:
             product_json = ""
             print("Parsing error!!!")
@@ -258,8 +266,13 @@ class Page:
             item_points_single , item_points_multi = self.Get_Geekbench_Points(cpu_buffer_single, cpu_buffer_multy, item_cpu, geekbench_status, 4)
             # item_points_single , item_points_multi = 0,0
 
+            # create hash string
+            data_to_hash = "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi)
+            hashed_key = sha256(data_to_hash.encode("utf-8")).hexdigest()
+
             # add data to shared array
-            data_buffer[item_title] = "INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi)
+            # data_buffer[item_title] = "INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');" % (item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi)
+            data_buffer[item_title] = [item_title, item_desc, item_link, item_price, item_price_old, item_image, item_cpu, item_battery_time, item_resolution, item_points_single, item_points_multi]
 
     # get text content
     def Get_Content(self, item):

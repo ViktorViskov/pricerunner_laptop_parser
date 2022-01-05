@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import core.page
 
 # filter one only laptops from tilbud list
@@ -9,7 +10,8 @@ import core.page
 
 # filter 13-14.5 screen 16 20 32GB RAM 1000-9000DKK LENOVO HP DELL 
 # core.page.Page("https://www.pricerunner.dk/cl/27/Baerbar?man_id=7227,11563,571&attr_60382316=60382329,60382332,60382330#price_min=1000&price_max=9000&s_54120131=13_14.5")
-core.page.Page("https://www.pricerunner.dk/cl/27/Baerbar?price_min=1000&price_max=9000&s_54120131=13_15.7")
+link = "https://www.pricerunner.dk/cl/27/Baerbar?price_min=1000&price_max=9000&s_54120131=13_15.7"
+core.page.Page(link)
 
 # filter 13-14.5 screen 16 20 32GB RAM 1000-9000DKK LENOVO HP DELL RYZEN 7
 # core.page.Page("https://www.pricerunner.dk/cl/27/Baerbar?man_id=7227,11563,571&attr_60382316=60382329,60382332,60382330&attr_60535860=60535878#price_min=1000&price_max=9000&s_54120131=13_14.5")
