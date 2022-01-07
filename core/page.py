@@ -56,7 +56,7 @@ class Page:
             json_page += 1
 
         # create items
-        self.Search_All_Items()
+        self.Process_All_Items()
 
     # function for string processing (create link to request and get json)
     def Url_Processing(self, link, offset=0):
@@ -109,179 +109,130 @@ class Page:
             print(key)
 
     # search all items and create new list
-    def Search_All_Items(self):
+    def Process_All_Items(self):
+        # variables
+        self.laptop_list = self.List_Processing(self.items)
+        print(len(self.laptop_list))
+
+        # # create multiprocessing manages
+        # manager = multiprocessing.Manager()
+
+        # # threads
+        # threads = []
+        # max_threads = 1
+
+        # # multiprocess data variables
+        # data_buffer = manager.list()
+
+        # # element number for log
+        # item_number = 1
+
+        # # loop for iterate laptops from list
+        # for item in self.items:
+
+        #     # create and start task
+        #     task = multiprocessing.Process(target=self.Make_Json_List_Item, args=(
+        #         item, 
+        #         data_buffer))
+        #     task.start()
+
+        #     # add task to quene
+        #     threads.append(task)
+
+        #     # increment number of task
+        #     item_number += 1
+
+        #     # status message
+        #     if (item_number % 100 == 0):
+        #         print("Loading... %d from %d. Amount of threads is %d. Max threads is %d" % (
+        #             item_number, len(self.items), len(threads), max_threads))
+
+        #     # check all tasks and delete if is ready
+        #     while len(threads) >= max_threads or len(threads) >= 490:
+
+        #         # delete task from quene
+        #         for task in threads:
+        #             if (task.is_alive() == False):
+        #                 threads.remove(task)
+
+        #         # getting info about cpu usage and wait
+        #         cpu_usage = psutil.cpu_percent(2)
+
+        #         # check for ram and cpu usage
+        #         if psutil.virtual_memory()[2] < 65 and cpu_usage < 90 and max_threads < 490:
+        #             max_threads += 10
+
+        #         elif max_threads > 10 and psutil.virtual_memory()[2] > 85 or max_threads > 10 and cpu_usage > 99:
+        #             max_threads -= 10
+
+        # wait for threads
+        # counter for await 10 minuts for all request
+        # await_counter = 60
+        # while len(threads) > 0 or await_counter > 0:
+
+        #     # delete task from quene
+        #     for task in threads:
+        #         if await_counter <= 0:
+        #             task.kill()
+        #             threads.remove(task)
+
+        #         elif task.is_alive() == False:
+        #             threads.remove(task)
+
+        #         if len(threads) == 0:
+        #             await_counter = 0
+
+            # wait
+            # time.sleep(10)
+
+            # print status message
+            # print("%d0 seconds to terminate %d tasks from quene" %
+            #       (await_counter, len(threads)))
+
+            # minus counter for awaiting tasks
+            # await_counter -= 1
+
+        # send data to db
+        # self.Send_To_Db(data_buffer)
+        # print(data_buffer)
+
+    # make JSON list item
+    def List_Processing(self, laptops_obj):
+
         # create multiprocessing manages
         manager = multiprocessing.Manager()
 
         # threads
         threads = []
-        max_threads = 1
+        max_threads = 10
 
-        # multiprocess data variables
-        data_buffer = manager.list()
+        # special list for multiprocessing
+        laptops_list = manager.list()
+        print(len(self.items))
 
-        # element number for log
-        item_number = 1
-
-        # loop for iterate laptops from list
-        for item in self.items:
+        for number in range(len(laptops_obj)):
 
             # create and start task
-            task = multiprocessing.Process(target=self.Make_Json_List_Item, args=(
-                item, 
-                data_buffer))
+            task = multiprocessing.Process(target=self.Parse_Laptop_From_Json, args=(laptops_obj[number], laptops_list))
             task.start()
 
             # add task to quene
             threads.append(task)
 
-            # increment number of task
-            item_number += 1
-
-            # status message
-            if (item_number % 100 == 0):
-                print("Loading... %d from %d. Amount of threads is %d. Max threads is %d" % (
-                    item_number, len(self.items), len(threads), max_threads))
-
-            # check all tasks and delete if is ready
-            while len(threads) >= max_threads or len(threads) >= 490:
+            # loop for controlling tasks amount
+            while len(threads) > max_threads or number == len(laptops_obj) - 1 and len(threads) != 0:
 
                 # delete task from quene
                 for task in threads:
                     if (task.is_alive() == False):
+                        print(task)
                         threads.remove(task)
-
-                # getting info about cpu usage and wait
-                cpu_usage = psutil.cpu_percent(2)
-
-                # check for ram and cpu usage
-                if psutil.virtual_memory()[2] < 65 and cpu_usage < 90 and max_threads < 490:
-                    max_threads += 10
-
-                elif max_threads > 10 and psutil.virtual_memory()[2] > 85 or max_threads > 10 and cpu_usage > 99:
-                    max_threads -= 10
-
-        # wait for threads
-        # counter for await 10 minuts for all request
-        await_counter = 60
-        while len(threads) > 0 or await_counter > 0:
-
-            # delete task from quene
-            for task in threads:
-                if await_counter <= 0:
-                    task.kill()
-                    threads.remove(task)
-
-                elif task.is_alive() == False:
-                    threads.remove(task)
-
-                if len(threads) == 0:
-                    await_counter = 0
-
-            # wait
-            time.sleep(10)
-
-            # print status message
-            print("%d0 seconds to terminate %d tasks from quene" %
-                  (await_counter, len(threads)))
-
-            # minus counter for awaiting tasks
-            await_counter -= 1
-
-        # send data to db
-        self.Send_To_Db(data_buffer)
-        # print(data_buffer)
-
-    # make JSON list item
-    def Make_Json_List_Item(self, item, data_buffer:list):
-
-        # getting info
-        item_desc = item['description']
-        item_link = "https://www.pricerunner.dk" + item['url']
-        item_price = item['lowestPrice']['amount']
-        item_image = "https://www.pricerunner.dk" + item['image']['path']
-
-        # get old price
-        try:
-            item_price_old = item['priceDrop']['oldPrice']['amount']
-        except:
-            item_price_old = item_price
-
-        # open link and parse data
-        item_link_root = lib_bs4.Selector_Serch(Browser(item_link).data)
-
-        # get json data
-        try:
-
-            #
-            # If parsing error, LOOK HERE FIRST
-            #
-
-            product_json = json.loads(self.Get_Content(item_link_root.Search_By_Id("initial_payload")))[
-                '__INITIAL_PROPS__']['__DEHYDRATED_QUERY_STATE__']['queries'][5]['state']['data']
-
-            #
-            # If parsing error, LOOK HERE FIRST
-            #
-        except:
-            product_json = ""
-            print("Parsing error!!!")
-
-        # get if present json
-        if product_json != "":
-
-            # dict for description
-            product_specification = {}
-
-            # read product description
-            # loop in sections
-            for section in product_json['specification']['sections']:
-                # loop in attributes
-                for atribut in section['attributes']:
-                    # set data in dict
-                    product_specification[atribut['name']] = atribut['values'][0]['name']
-
-            # # uncomment to show description
-            # for key in product_specification:
-            #     print("%s -> %s" % (key, product_specification[key]))
-
-            # info about item
-            item_title = self.Get_Dict_Value('Produktnavn', product_specification).strip().upper()
-
-            # CPU
-            item_cpu = "%s %s" % (self.Get_Dict_Value('Processor-serie', product_specification), self.Get_Dict_Value('Processor-model', product_specification))
+                
+                # pause
+                time.sleep(1)
             
-            # Battery
-            item_battery_time = float(self.Get_Dict_Value('Batteritid', product_specification).split(" ")[0]) if self.Get_Dict_Value('Batteritid', product_specification) != '' else 0
-
-            # Resolution
-            item_resolution = self.Get_Dict_Value('Skærmopløsning', product_specification)
-
-            # create hash string
-            data_to_hash = "%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
-                item_title,
-                item_desc,
-                item_link,
-                item_price,
-                item_price_old,
-                item_image,
-                item_cpu,
-                item_battery_time,
-                item_resolution)
-            data_stamp = md5(data_to_hash.encode("utf-8")).hexdigest()
-
-            # add data to threads buffer
-            data_buffer.append(Laptop(
-                data_stamp=data_stamp,
-                title=item_title,
-                description=item_desc,
-                link=item_link,
-                discout_price=item_price,
-                price=item_price_old,
-                image_link=item_image,
-                cpu=item_cpu,
-                battery=item_battery_time,
-                resolution=item_resolution))
+        # return created list with laptops
+        return laptops_list
 
     # get text content
     def Get_Content(self, item):
@@ -398,3 +349,101 @@ class Page:
 
         # result
         return result
+
+    # Load CPU infos
+    def Get_CPU_Info(self, cpu_list_from_db, cpu_list_from_laptops):
+        # variables
+        new_cpues = dict()
+
+        for cpu in cpu_list_from_laptops:
+            if cpu not in cpu_list_from_db:
+                new_cpues[cpu] = [] 
+
+    # Method for parsing laptop from json
+    def Parse_Laptop_From_Json(self, laptop_obj:object, multiprocess_buffer:list):
+        # getting info
+        laptop_desc = laptop_obj['description']
+        laptop_link = "https://www.pricerunner.dk" + laptop_obj['url']
+        laptop_price = laptop_obj['lowestPrice']['amount']
+        laptop_image = "https://www.pricerunner.dk" + laptop_obj['image']['path']
+
+        # get old price
+        try:
+            laptop_price_old = laptop_obj['priceDrop']['oldPrice']['amount']
+        except:
+            laptop_price_old = laptop_price
+
+        # open link and parse data
+        laptop_link_root = lib_bs4.Selector_Serch(Browser(laptop_link).data)
+
+        # get json data
+        try:
+
+            #
+            # If parsing error, LOOK HERE FIRST
+            #
+
+            # TODO Make more smart
+            laptop_json = json.loads(self.Get_Content(laptop_link_root.Search_By_Id("initial_payload")))['__INITIAL_PROPS__']['__DEHYDRATED_QUERY_STATE__']['queries'][5]['state']['data']
+
+            #
+            # If parsing error, LOOK HERE FIRST
+            #
+        except:
+            laptop_json = ""
+            print("Parsing error!!!")
+
+        # get if present json
+        if laptop_json != "":
+
+            # dict for description
+            laptop_specification = {}
+
+            # read laptop description
+            # loop in sections
+            for section in laptop_json['specification']['sections']:
+                # loop in attributes
+                for attribute in section['attributes']:
+                    # set data in dict
+                    laptop_specification[attribute['name']] = attribute['values'][0]['name']
+
+            # # uncomment to show description
+            # for key in laptop_specification:
+            #     print("%s -> %s" % (key, laptop_specification[key]))
+
+            # info about item
+            laptop_title = self.Get_Dict_Value('Produktnavn', laptop_specification).strip().upper()
+
+            # CPU
+            laptop_cpu = "%s %s" % (self.Get_Dict_Value('Processor-serie', laptop_specification), self.Get_Dict_Value('Processor-model', laptop_specification))
+            
+            # Battery
+            laptop_battery_time = float(self.Get_Dict_Value('Batteritid', laptop_specification).split(" ")[0]) if self.Get_Dict_Value('Batteritid', laptop_specification) != '' else 0
+
+            # Resolution
+            laptop_resolution = self.Get_Dict_Value('Skærmopløsning', laptop_specification)
+
+            # create hash string
+            data_to_hash = "%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
+                laptop_title,
+                laptop_desc,
+                laptop_link,
+                laptop_price,
+                laptop_price_old,
+                laptop_image,
+                laptop_cpu,
+                laptop_battery_time,
+                laptop_resolution)
+            data_stamp = md5(data_to_hash.encode("utf-8")).hexdigest()
+
+            multiprocess_buffer.append(Laptop(
+                data_stamp=data_stamp,
+                title=laptop_title,
+                description=laptop_desc,
+                link=laptop_link,
+                discount_price=laptop_price,
+                price=laptop_price_old,
+                image_link=laptop_image,
+                cpu=laptop_cpu,
+                battery=laptop_battery_time,
+                resolution=laptop_resolution))

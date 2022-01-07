@@ -9,7 +9,7 @@ import requests, time
 class Browser:
     
     # constructor
-    def __init__(self, url, load_counter = 30):
+    def __init__(self, url, load_counter = 3):
         # max count
         self.load_counter = load_counter
 
