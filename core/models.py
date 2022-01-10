@@ -13,3 +13,8 @@ class Laptop(BaseModel):
     cpu:str
     battery:str
     resolution:str
+
+class CPU(BaseModel):
+    title:str
+    single:float = 0
+    multi:float = 0

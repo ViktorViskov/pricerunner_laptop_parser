@@ -6,12 +6,11 @@ CREATE DATABASE pricerunner_laptops;
 USE pricerunner_laptops;
 
 -- table for cpu benchmark scores
-CREATE TABLE cpu_benchmarks (
-    id int not null auto_increment unique,
-    cpu_model varchar(50),
-    geekbench_single decimal(10, 0),
-    geekbench_multi decimal(10, 0),
-    PRIMARY KEY (id)
+CREATE TABLE cpu_list (
+    cpu varchar(64) unique,
+    single decimal(10, 0),
+    multi decimal(10, 0),
+    PRIMARY KEY (cpu)
 );
 
 -- table for laptops
@@ -23,8 +22,20 @@ CREATE TABLE laptops (
     price decimal(10, 0),
     price_old decimal(10, 0),
     image_url varchar(255),
-    CPU int,
+    cpu char(64),
     battery decimal(10, 0),
     resolution varchar(50),
-    FOREIGN KEY (CPU) REFERENCES cpu_benchmarks(id)
+    FOREIGN KEY (cpu) REFERENCES cpu_list(cpu)
+);
+
+-- table for cpu benchmark scores
+CREATE TABLE configs (
+    is_active bool,
+    description varchar(255),
+    link varchar(255)
+);
+
+-- default configs
+INSERT INTO configs VALUES (
+    true, "All laptops", "https://www.pricerunner.dk/cl/27/Baerbar"
 );

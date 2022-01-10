@@ -37,7 +37,8 @@ class Mysql_Connect:
     def IO(self, sql_command, values = None):
 
         self.cursor.execute(sql_command)
-        self.connection.commit()
+        if values:
+            self.connection.commit()
 
         return self.cursor.fetchall()
 
