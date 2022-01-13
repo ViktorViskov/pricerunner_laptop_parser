@@ -5,6 +5,7 @@
 # libs
 import json
 import multiprocessing
+from operator import le
 import time
 from datetime import datetime
 import psutil
@@ -131,13 +132,8 @@ class Bot:
         self.loaded_laptops = self.List_Processing(self.items)
 
         # check for emergency stop
-        emergency_stop_counter = 0
-        for laptop in self.loaded_laptops:
-            if laptop == "STOP":
-                emergency_stop_counter += 1
-
-        if emergency_stop_counter > len(self.loaded_laptops) / 100: # 1 %
-            print("Emergency stop. Check Parse_Laptop_From_Json. STOP amount %d" %(emergency_stop_counter))
+        if len(self.loaded_laptops) < len(self.items) - int(len(self.items) * 0.01):
+            print("Emergency stop. Check Parse_Laptop_From_Json. loaded > %d items > %d" %(len(self.loaded_laptops), len(self.items)))
             return 1
         # check for emergency stop
         
@@ -302,9 +298,8 @@ class Bot:
                 battery=laptop_battery_time,
                 resolution=laptop_resolution))
 
-        else:
-            # add string message to buffer for emergency stop
-            multiprocess_buffer.append("STOP") 
+        # else:
+            # make nothing
 
     # method for define which is a new cpu's, then parse data about this cpu and send cpu's list to db  
     def Register_Cpu_List(self, loaded_laptops):
