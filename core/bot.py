@@ -131,8 +131,13 @@ class Bot:
         self.loaded_laptops = self.List_Processing(self.items)
 
         # check for emergency stop
-        if "STOP" in self.loaded_laptops:
-            print("Emergency stop. Check Parse_Laptop_From_Json")
+        emergency_stop_counter = 0
+        for laptop in self.loaded_laptops:
+            if laptop == "STOP":
+                emergency_stop_counter += 1
+
+        if emergency_stop_counter > len(self.loaded_laptops) / 100: # 1 %
+            print("Emergency stop. Check Parse_Laptop_From_Json. STOP amount %d" %(emergency_stop_counter))
             return 1
         # check for emergency stop
         
