@@ -259,9 +259,10 @@ class Bot:
             # # uncomment to show description
             # for key in laptop_specification:
             #     print("%s -> %s" % (key, laptop_specification[key]))
+            # print("**********************************************************")
 
             # info about item
-            laptop_title = self.Get_Dict_Value('Produktnavn', laptop_specification).upper()
+            laptop_title = self.Get_Dict_Value('Product name', laptop_specification).upper()
 
             # CPU
             laptop_cpu = "%s %s" % (self.Get_Dict_Value('Processor', laptop_specification), self.Get_Dict_Value('Processor-model', laptop_specification))
