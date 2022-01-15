@@ -5,7 +5,6 @@
 # libs
 import json
 import multiprocessing
-from operator import le
 import time
 from datetime import datetime
 import psutil
@@ -127,22 +126,70 @@ class Bot:
     # search all items and create new list
     def Process_All_Items(self):
         # variables
+        self.laptops_to_load: list() = list()
+        self.laptops_to_delete: list(str) = list()
 
-        # Loaded laptop list
-        self.loaded_laptops = self.List_Processing(self.items)
+        # Laptops from db
+        self.db_laptops : list(Laptop) = self.Laptops_From_Db()
+
+        # define laptops which must be loaded or deleted
+        self.Compare_Laptops()
+
+        # Loading laptops description
+        self.loaded_laptops = self.List_Processing(self.laptops_to_load)
 
         # check for emergency stop
-        if len(self.loaded_laptops) < len(self.items) - int(len(self.items) * 0.01):
+        if len(self.loaded_laptops) < len(self.laptops_to_load) - int(len(self.laptops_to_load) * 0.01):
             print("Emergency stop. Check Parse_Laptop_From_Json. loaded > %d items > %d" %(len(self.loaded_laptops), len(self.items)))
             return 1
         # check for emergency stop
-        
+
+        # delete laptops if are must update or not available
+        self.Delete_Laptops()
         
         # Register cpues in db
         self.Register_Cpu_List(self.loaded_laptops)
 
         # Register Laptops in db
         self.Register_Laptop_List(self.loaded_laptops)
+
+    # compare laptops from json and laptops from db and return laptops which must be loaded
+    def Compare_Laptops(self):
+
+        # data from db
+        db_laptop_names = list(map(lambda laptop: laptop.title, self.db_laptops))
+        db_laptop_hashes = list(map(lambda laptop: laptop.data_stamp, self.db_laptops))
+        loaded_laptop_names = list(map(lambda laptop: self.Get_Dict_Value("name", laptop).strip().upper(), self.items))
+        laptops_to_load = []
+
+        # generate data from json response
+        json_laptop_hashes = list(map(lambda l: self.Make_Laptop_Hash( self.Get_Dict_Value('name', l).strip().upper(), self.Get_Dict_Value('description', l), "https://www.pricerunner.dk" + l['url'], l['lowestPrice']['amount'], "https://www.pricerunner.dk" + l['image']['path']), self.items))
+
+        # searching laptops to load
+        for num in range(len(json_laptop_hashes)):
+            if json_laptop_hashes[num] not in db_laptop_hashes:
+                laptops_to_load.append(self.items[num])
+
+                # check and add to delete laptop if exist
+                if self.Get_Dict_Value("name", self.items[num]).strip().upper() in db_laptop_names:
+                    self.laptops_to_delete.append(self.Get_Dict_Value("name", self.items[num]).strip().upper())
+
+        self.laptops_to_load = laptops_to_load
+
+        # searching laptops to delete
+        for db_laptop in self.db_laptops:
+            if db_laptop.title not in loaded_laptop_names:
+                self.laptops_to_delete.append(db_laptop.title)
+
+
+    # method for delete laptops
+    def Delete_Laptops(self):
+        for laptop_name in self.laptops_to_delete:
+            try:
+                self.mysql.I("DELETE FROM laptops WHERE title = '%s'" % (laptop_name))
+            except:
+                print("Delete error!")
+                print("DELETE FROM laptops WHERE title = '%s'" % (laptop_name))
 
     # make JSON list item
     def List_Processing(self, laptops_obj):
@@ -198,16 +245,10 @@ class Bot:
     # Method for parsing laptop from json
     def Parse_Laptop_From_Json(self, laptop_obj:object, multiprocess_buffer:list):
         # getting info
-        laptop_desc = laptop_obj['description'] if laptop_obj['description'] != None else ""
+        laptop_desc = self.Get_Dict_Value('description', laptop_obj)
         laptop_link = "https://www.pricerunner.dk" + laptop_obj['url']
         laptop_price = laptop_obj['lowestPrice']['amount']
         laptop_image = "https://www.pricerunner.dk" + laptop_obj['image']['path']
-
-        # get old price
-        try:
-            laptop_price_old = laptop_obj['priceDrop']['oldPrice']['amount']
-        except:
-            laptop_price_old = laptop_price
 
         # open link and parse data
         laptop_link_root = lib_bs4.Selector_Serch(Browser(laptop_link).data)
@@ -262,7 +303,7 @@ class Bot:
             # print("**********************************************************")
 
             # info about item
-            laptop_title = self.Get_Dict_Value('Product name', laptop_specification).upper()
+            laptop_title = self.Get_Dict_Value('name', laptop_obj).strip().upper()
 
             # CPU
             laptop_cpu = "%s %s" % (self.Get_Dict_Value('Processor', laptop_specification), self.Get_Dict_Value('Processor-model', laptop_specification))
@@ -274,26 +315,14 @@ class Bot:
             # Resolution
             laptop_resolution = self.Get_Dict_Value('Skærmopløsning', laptop_specification)
 
-            # create hash string
-            data_to_hash = "%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
-                laptop_title,
-                laptop_desc,
-                laptop_link,
-                laptop_price,
-                laptop_price_old,
-                laptop_image,
-                laptop_cpu,
-                laptop_battery_time,
-                laptop_resolution)
-            data_stamp = md5(data_to_hash.encode("utf-8")).hexdigest()
+            data_stamp = self.Make_Laptop_Hash(laptop_title, laptop_desc, laptop_link, laptop_price, laptop_image)
 
             multiprocess_buffer.append(Laptop(
                 data_stamp=data_stamp,
                 title=laptop_title,
                 description=laptop_desc,
                 link=laptop_link,
-                discount_price=laptop_price,
-                price=laptop_price_old,
+                price=laptop_price,
                 image_link=laptop_image,
                 cpu=laptop_cpu,
                 battery=laptop_battery_time,
@@ -355,56 +384,16 @@ class Bot:
             self.mysql.I("INSERT INTO cpu_list VALUES ('%s','%s','%s')" % (cpu_to_db.title, cpu_to_db.single, cpu_to_db.multi)) 
 
     # method for define which is a new cpu's, then parse data about this cpu and send cpu's list to db  
-    def Register_Laptop_List(self, loaded_laptops):
-        loaded_laptop_names = list(map(lambda laptop: laptop.title, loaded_laptops))
-
-        # load laptops from db
-        db_laptops = self.Laptops_From_Db()
-
-        # variable with exist data hash
-        db_laptop_names = list(map(lambda laptop: laptop.title, db_laptops))
-        db_laptop_hashes = list(map(lambda laptop: laptop.data_stamp, db_laptops))
-        laptops_to_db = []
-        laptops_to_delete = []
-
-        # Iterate loaded laptops and check data via hash
-        # If hash not like in db, overide record with new data
-
-        # search laptops which must added/updated
-        for loaded_laptop in loaded_laptops:
-            if loaded_laptop.data_stamp not in db_laptop_hashes:
-                laptops_to_db.append(loaded_laptop)
-
-                # check for laptop in db. If is it, laptop must be deleted befor update data
-                if loaded_laptop.title in db_laptop_names:
-                    
-                    # adding laptop to delete
-                    laptops_to_delete.append(loaded_laptop)
-        
-        # search laptops which not available
-        for db_laptop in db_laptops:
-            if db_laptop.title not in loaded_laptop_names:
-                laptops_to_delete.append(db_laptop)
-        
-        # delete all laptops from list
-        for laptop_to_delete in laptops_to_delete:
-            # error handling
-            try:
-                self.mysql.I("DELETE FROM laptops WHERE title = '%s'" % (laptop_to_delete.title))
-            except:
-                print("Delete error!")
-                print("DELETE FROM laptops WHERE title = '%s'" % (laptop_to_delete.title))
-
-
+    def Register_Laptop_List(self, laptops_to_db):
         # send laptops to db
         for laptop_to_db in laptops_to_db:
             # error handling
             try:
-                self.mysql.I("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s' )" % (laptop_to_db.data_stamp, laptop_to_db.title, laptop_to_db.description, laptop_to_db.link, laptop_to_db.discount_price, laptop_to_db.price, laptop_to_db.image_link, laptop_to_db.cpu, laptop_to_db.battery, laptop_to_db.resolution))
+                self.mysql.I("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s' )" % (laptop_to_db.data_stamp, laptop_to_db.title, laptop_to_db.description, laptop_to_db.link, laptop_to_db.price, laptop_to_db.image_link, laptop_to_db.cpu, laptop_to_db.battery, laptop_to_db.resolution))
             except:
                 print("Inser error!")
-                print("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s' )" % (laptop_to_db.data_stamp, laptop_to_db.title, laptop_to_db.description, laptop_to_db.link, laptop_to_db.discount_price, laptop_to_db.price, laptop_to_db.image_link, laptop_to_db.cpu, laptop_to_db.battery, laptop_to_db.resolution))
-    
+                print("INSERT INTO laptops VALUES ('%s','%s','%s','%s','%s','%s','%s','%s','%s' )" % (laptop_to_db.data_stamp, laptop_to_db.title, laptop_to_db.description, laptop_to_db.link, laptop_to_db.price, laptop_to_db.image_link, laptop_to_db.cpu, laptop_to_db.battery, laptop_to_db.resolution))
+
 
     # get text content
     def Get_Content(self, item):
@@ -482,7 +471,7 @@ class Bot:
         result = ""
 
         # check for key
-        if key in checked_dict:
+        if key in checked_dict and checked_dict[key] != None:
             result = checked_dict[key].replace("'","").replace('"',"").replace('`',"").strip()
 
         # result
@@ -516,13 +505,19 @@ class Bot:
             title=record[1],
             description=record[2],
             link=record[3],
-            discount_price=record[4],
-            price=record[5],
-            image_link=record[6],
-            cpu=record[7],
-            battery=record[8],
-            resolution=record[9]),
+            price=record[4],
+            image_link=record[5],
+            cpu=record[6],
+            battery=record[7],
+            resolution=record[8]),
             self.mysql.IO("select * from laptops;")))
+
+    # Method for make laptop hash
+    def Make_Laptop_Hash(self, title: str, desc: str, link: str, price: float, image: str):
+        # create hash string
+        data_to_hash = "%s,%s,%s,%s,%s" % (title, desc, link, price, image)
+        return md5(data_to_hash.encode("utf-8")).hexdigest()
+
 
     # method for check cpu and ram usage
     def Check_Cpu_Ram_Load(self, max_threads):

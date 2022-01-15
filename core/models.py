@@ -7,7 +7,6 @@ class Laptop(BaseModel):
     title:str
     description:str
     link:str
-    discount_price:float
     price:float
     image_link:str
     cpu:str

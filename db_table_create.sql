@@ -20,7 +20,6 @@ CREATE TABLE laptops (
     description varchar(255),
     link varchar(255),
     price decimal(10, 0),
-    price_old decimal(10, 0),
     image_url varchar(255),
     cpu char(64),
     battery decimal(10, 0),
