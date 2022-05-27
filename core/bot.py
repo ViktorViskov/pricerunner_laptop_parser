@@ -85,8 +85,11 @@ class Bot:
         # get attributes from current link
         old_link_attributs = link.split("?")[1].split("&")
 
-        # new link base
-        new_link = "https://www.pricerunner.dk/public/search/category/products/v2/dk/27?size=1000&offset=%d" % offset
+        # link for parse laptops
+        # new_link = "https://www.pricerunner.dk/public/search/category/products/v2/dk/27?size=1000&offset=%d" % offset
+
+        # link for parse desktops
+        new_link = "https://www.pricerunner.dk/public/search/category/products/v2/dk/223?size=1000&offset=%d" % offset
 
         # variables for prices
         price_min = 0
@@ -138,7 +141,7 @@ class Bot:
         # Loading laptops description
         self.loaded_laptops = self.List_Processing(self.laptops_to_load)
 
-        # check for emergency stop
+        # check for emergency stop if different more 1%
         if len(self.loaded_laptops) < len(self.laptops_to_load) - int(len(self.laptops_to_load) * 0.01):
             print("Emergency stop. Check Parse_Laptop_From_Json. loaded > %d items > %d" %(len(self.loaded_laptops), len(self.items)))
             return 1
@@ -260,9 +263,19 @@ class Bot:
             # If parsing error, LOOK HERE FIRST
             #
 
+            # check for loaded data and try if error
+            for number in range(5):
+                if self.Get_Content(laptop_link_root.Search_By_Id("initial_payload")) == "":
+                    # print("Load data error. Try nr %s" % (number))
+                    laptop_link_root = lib_bs4.Selector_Serch(Browser(laptop_link).data)
+                else:
+                    break
+
+
             # Here is serching data to current product
             mixed_data = json.loads(self.Get_Content(laptop_link_root.Search_By_Id("initial_payload")))['__INITIAL_PROPS__']['__DEHYDRATED_QUERY_STATE__']['queries']
 
+            # variable for parsing data
             laptop_json = ""
 
             # loop for search product in data arrays
@@ -271,6 +284,7 @@ class Bot:
                     if 'data' in data_querry['state']:
                         if 'specification' in data_querry['state']['data']:
                             laptop_json = data_querry['state']['data']
+                            break
             
             #
             # If parsing error, LOOK HERE FIRST
